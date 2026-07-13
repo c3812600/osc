@@ -113,6 +113,22 @@ def send_osc(ip: str, port: int, address: str, args: list):
         sock.close()
 
 
+def send_udp(ip: str, port: int, payload: str):
+    data = payload.encode('utf-8')
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.sendto(data, (ip, port))
+    finally:
+        sock.close()
+
+
+def get_protocol(data: dict) -> str:
+    protocol = data.get('protocol', 'osc')
+    if not isinstance(protocol, str):
+        return ""
+    return protocol.lower()
+
+
 def validate_message(data: dict) -> tuple[bool, str]:
     ip = data.get('ip') or data.get('target_ip')
     if not ip:
@@ -121,6 +137,16 @@ def validate_message(data: dict) -> tuple[bool, str]:
     port = data.get('port')
     if not isinstance(port, int) or not (1 <= port <= 65535):
         return False, "目标端口必须在 1-65535 范围内"
+
+    protocol = get_protocol(data)
+    if protocol not in ('osc', 'udp'):
+        return False, "protocol 仅支持 osc 或 udp"
+
+    if protocol == 'udp':
+        payload = data.get('payload')
+        if not isinstance(payload, str):
+            return False, "UDP 模式下 payload 必须是字符串"
+        return True, ""
 
     address = data.get('address') or data.get('osc_address')
     if not address:
@@ -161,20 +187,30 @@ async def handle_client(websocket):
                 log("WARN", f"[ws_osc_server] 验证失败: {error}")
                 continue
 
+            protocol = get_protocol(data)
             ip = data.get('ip') or data.get('target_ip')
             port = data['port']
-            address = data.get('address') or data.get('osc_address')
-            args = data.get('args', [])
-
-            send_osc(ip, port, address, args)
-            log("INFO", f"[ws_osc_server] WS->OSC forwarded {client_ip} -> {ip}:{port} {address} {args}")
-
-            resp = {
-                "ok": True,
-                "target": f"{ip}:{port}",
-                "address": address,
-                "args_count": len(args)
-            }
+            if protocol == 'udp':
+                payload = data['payload']
+                send_udp(ip, port, payload)
+                log("INFO", f"[ws_osc_server] WS->UDP forwarded {client_ip} -> {ip}:{port} {payload!r}")
+                resp = {
+                    "ok": True,
+                    "target": f"{ip}:{port}",
+                    "protocol": "udp",
+                    "bytes_sent": len(payload.encode('utf-8'))
+                }
+            else:
+                address = data.get('address') or data.get('osc_address')
+                args = data.get('args', [])
+                send_osc(ip, port, address, args)
+                log("INFO", f"[ws_osc_server] WS->OSC forwarded {client_ip} -> {ip}:{port} {address} {args}")
+                resp = {
+                    "ok": True,
+                    "target": f"{ip}:{port}",
+                    "address": address,
+                    "args_count": len(args)
+                }
             await websocket.send(json.dumps(resp, ensure_ascii=False))
 
     except Exception as e:

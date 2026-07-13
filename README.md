@@ -35,7 +35,7 @@ build.bat
 
 ## 消息格式
 
-### 请求
+### 请求（OSC，兼容旧格式）
 
 ```json
 {
@@ -43,6 +43,17 @@ build.bat
   "port": 8001,
   "address": "/iPad",
   "args": ["欢迎词", "欢迎光临"]
+}
+```
+
+### 请求（普通 UDP 文本）
+
+```json
+{
+  "protocol": "udp",
+  "ip": "127.0.0.1",
+  "port": 2756,
+  "payload": "ALL_ON"
 }
 ```
 
@@ -58,6 +69,16 @@ build.bat
 }
 ```
 
+UDP 成功：
+```json
+{
+  "ok": true,
+  "target": "127.0.0.1:2756",
+  "protocol": "udp",
+  "bytes_sent": 6
+}
+```
+
 失败：
 ```json
 {
@@ -70,10 +91,24 @@ build.bat
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
+| `protocol` | string | 否 | 协议类型，`osc` 或 `udp`，默认 `osc` |
 | `ip` | string | 是 | 目标IP（支持别名 `target_ip`） |
 | `port` | number | 是 | 目标端口 1-65535 |
-| `address` | string | 是 | OSC地址，以`/`开头（支持别名 `osc_address`） |
-| `args` | array | 否 | 参数数组，支持 int/float/string/bool |
+| `address` | string | OSC时是 | OSC地址，以`/`开头（支持别名 `osc_address`） |
+| `args` | array | 否 | OSC参数数组，支持 int/float/string/bool |
+| `payload` | string | UDP时是 | 普通 UDP 文本内容，按 UTF-8 编码发送 |
+
+## 协议说明
+
+- 未传 `protocol` 时，默认按 `OSC` 处理，兼容旧 JSON。
+- `protocol: "osc"` 时，使用 `address` + `args` 组装 OSC Bundle 后通过 UDP 发送。
+- `protocol: "udp"` 时，直接把 `payload` 按 UTF-8 编码后通过 UDP 发送，不做 OSC 封装。
+
+兼容旧格式示例：
+
+```json
+{"ip":"230.230.230.235","port":8010,"address":"/iPad","args":["黑场"]}
+```
 
 ## 参数类型
 
